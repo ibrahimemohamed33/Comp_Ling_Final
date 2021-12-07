@@ -1,31 +1,20 @@
-import json
 import inflect
-import pandas as pd
-import matplotlib.pyplot as plt
-import os
-import pickle
 
-from random import shuffle
+from word_utils import EMPTY_CHARACTER, DELETE
 from collections import Counter
-from data import find_all_singular_nouns
-from phonology import are_nouns_OK, word_IPA
-
-EMPTY_CHARACTER, DELETE = "*", '-'
-PHONEME_DICT_NAME = "phoneme_to_phoneme_plural.obj"
 
 
 def are_similar(wordA: str, wordB: str, epsilon: int or float):
     '''
     Checks if wordA and wordB are similar by checking if d(wordA, wordB) <= epsilon,
-    where d: L x L -> R are Levenshtein and Hamming distance metrics. Since we 
+    where d: L x L -> R are Levenshtein distance metrics. Since we 
     want different words from wordA or wordB, we must discount identical strings
 
     The Hamming distance serves as an upper bound to the Levenshtein distance
     for strings of the same length
     '''
     distance_levenshtein = levenshtein_distance(wordA, wordB, epsilon)
-    distance_hamming = hamming_distance(wordA, wordB)
-    return 0 < distance_levenshtein <= epsilon or 0 < distance_hamming <= epsilon
+    return 0 < distance_levenshtein <= epsilon
 
 
 def hamming_distance(wordA: str, wordB: str) -> int:
@@ -196,6 +185,9 @@ def apply_change_to_string(noun: str, formatted_change: str):
 
 def get_similar_words(word: str, words: 'list[str]', epsilon: int,
                       limit: int) -> 'list[str]':
+    '''
+    Finds similar words within the array of words
+    '''
     similar_words = []
     for other_word in words:
         if len(similar_words) <= limit:
@@ -204,128 +196,3 @@ def get_similar_words(word: str, words: 'list[str]', epsilon: int,
         else:
             break
     return similar_words
-
-
-def cog_model(nouns, epsilon: int, is_regular: bool, limit=25, is_phonology=False) -> pd.DataFrame:
-    rows, engine = [], inflect.engine()
-    data, phoneme_dict = process_nouns(nouns, is_phonology, engine, is_regular)
-    columns = ["noun", 'noun_rep', 'similar_words', "predicted_plural",
-               'actual_plural', 'accurate_prediction']
-
-    for noun in nouns:
-        noun_rep, plural_rep = create_rep(noun, engine, is_phonology)
-        if noun_rep != EMPTY_CHARACTER and plural_rep != EMPTY_CHARACTER:
-            sim_words = get_similar_words(noun_rep, data, epsilon, limit)
-            predicted_plural = predict_plural(noun_rep, sim_words, engine,
-                                              is_phonology, phoneme_dict)
-            rows.append({'noun': noun,
-                         'noun_rep': noun_rep,
-                         'similar_words': sim_words,
-                         'predicted_plural': predicted_plural,
-                         'actual_plural': plural_rep,
-                         'accurate_prediction': plural_rep == predicted_plural})
-
-    return pd.DataFrame(rows, columns=columns)
-
-
-def process_nouns(nouns: 'list[str]', is_phonology: bool, engine: inflect.engine,
-                  is_regular: bool):
-    if not is_phonology:
-        return nouns, {}
-    else:
-        regular_name = "REGULAR" if is_regular else "IRREGULAR"
-        file_name = regular_name + "_" + PHONEME_DICT_NAME
-        phoneme_dict, phoneme_list = {}, []
-        if os.path.isfile(file_name):
-            with open(file_name, 'rb') as f:
-                phoneme_dict = pickle.load(f)
-
-        for noun in nouns:
-            plural_noun = engine.plural_noun(noun)
-            noun_IPA, plural_IPA = word_IPA(noun), word_IPA(plural_noun)
-            if noun_IPA != EMPTY_CHARACTER and plural_IPA != EMPTY_CHARACTER:
-                phoneme_list.append(noun_IPA)
-                if noun_IPA not in phoneme_dict:
-                    phoneme_dict[noun_IPA] = plural_IPA
-
-        with open(file_name, 'wb') as f:
-            pickle.dump(phoneme_dict, f)
-
-        return phoneme_list, phoneme_dict
-
-
-def create_rep(noun: str, engine: inflect.engine, is_phonology: str):
-    plural_noun = engine.plural_noun(noun)
-    if not is_phonology:
-        return noun, plural_noun
-    return word_IPA(noun), word_IPA(plural_noun)
-
-
-def accuracy_values(nouns: 'list[str]', is_regular: bool, is_phonology: bool, max_epsilon: int,
-                    debug=True):
-
-    x_values, y_values = [], []
-    for epsilon in range(1, max_epsilon):
-        x_values.append(epsilon)
-        df = cog_model(nouns, epsilon, is_regular, is_phonology=is_phonology)
-        values = json.loads(df.accurate_prediction.value_counts().to_json())
-        if debug:
-            print(epsilon)
-            print(values)
-            print(df)
-            pd.set_option("display.max_rows", 20, "display.max_columns", None)
-
-        try:
-            accuracy_rate = values['True'] / (values['True'] + values['False'])
-        except KeyError as e:
-            accuracy_rate = 0 if e == "True" else 1
-
-        y_values.append(accuracy_rate)
-
-    return x_values, y_values
-
-
-def run_models(file_name: str, max_epsilon: int):
-    '''
-    Runs the cognitive models and plots the accuracy rates over regular/irregular noun
-    and epsilon
-    '''
-    reg_nouns, irreg_nouns = find_all_singular_nouns(file_name)
-
-    print("Now running the models on irregular nouns ")
-    p2, q2 = accuracy_values(irreg_nouns, False, is_phonology=False,
-                             max_epsilon=max_epsilon)
-
-    x2, y2 = accuracy_values(irreg_nouns, False, is_phonology=True,
-                             max_epsilon=max_epsilon)
-
-    print("Now running the models on regular nouns ")
-    p1, q1 = accuracy_values(reg_nouns, True, False, max_epsilon)
-    x1, y1 = accuracy_values(reg_nouns, True, True, max_epsilon)
-
-    print("Now plotting the values")
-    fig, axs = plt.subplots(2, 2)
-
-    axs[0, 0].plot(p1, q1), axs[0, 0].set_title('O(Regular Nouns)')
-    axs[1, 0].plot(p2, q2, 'tab:green'), axs[1,
-                                             0].set_title('O(Irregular Nouns)')
-
-    axs[0, 1].plot(x1, y1, 'tab:orange'), axs[0,
-                                              1].set_title('P(Regular Nouns)')
-    axs[1, 1].plot(x2, y2, 'tab:red'), axs[1,
-                                           1].set_title('P(Irregular Nouns)')
-
-    for ax in axs.flat:
-        ax.set(xlabel='Epsilon', ylabel='Accuracy Rate')
-
-    for ax in axs.flat:
-        ax.label_outer()
-
-    plt.savefig('Main_Plot.png')
-
-
-def generate_random_nouns(reg_nouns: 'list[str]', irreg_nouns: 'list[str]',
-                          limit: int):
-    shuffle(reg_nouns)
-    shuffle(irreg_nouns)
-    return reg_nouns[:limit], irreg_nouns[:limit]

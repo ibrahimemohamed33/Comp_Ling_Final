@@ -3,10 +3,9 @@ import pandas as pd
 
 
 from sklearn.model_selection import train_test_split
-from data import find_all_singular_nouns, get_name
+from data import find_all_singular_nouns, get_file_pathname
 from neural_network import run_neural_network
-from orthography import cog_model
-from phonology import phonological_data
+from model import cognitive_model
 
 
 epsilon = 2
@@ -22,8 +21,8 @@ def read_load_data(is_phonology: bool, file_name: str, epsilon=epsilon,
     contains the data and load it into a pandas dataframe.
     '''
 
-    regular_path = get_name(True, is_phonology, file_name)
-    irregular_path = get_name(False, is_phonology, file_name)
+    regular_path = get_file_pathname(True, is_phonology, file_name)
+    irregular_path = get_file_pathname(False, is_phonology, file_name)
 
     # if the file exists, we just need to load it using pandas
     if os.path.isfile(regular_path) and os.path.isfile(irregular_path):
@@ -54,10 +53,7 @@ def load_data(nouns: 'list[str]', is_phonology: bool, is_regular: bool, epsilon:
     Queries the data from the nouns and outputs a formatted dataframe
     '''
 
-    if is_phonology:
-        return phonological_data(nouns, is_regular, file_name)
-    else:
-        return cog_model(nouns, epsilon, limit)
+    return cognitive_model(nouns, epsilon, limit)
 
 
 def extract_columns(dataframe: pd.DataFrame, columnA_index: int,
@@ -110,20 +106,12 @@ def run_model(is_phonology: bool, test_size: int,
 
     if not mix:
         reg, irreg = prepare_data(is_phonology, test_size, text_file, mix)
-        (X_reg_train,  X_reg_test, y_reg_train, y_reg_test) = reg
-        (X_irreg_train,  X_irreg_test, y_irreg_train, y_irreg_test) = irreg
-
         print("Now printing the neural network's results for regular nouns\n\n")
-        run_neural_network(X_reg_train, X_reg_test, y_reg_train, y_reg_test)
-
-        # print("Now printing the neural network's results for irregular nouns\n\n")
-        # run_neural_network(X_irreg_train,  X_irreg_test,
-        #                    y_irreg_train, y_irreg_test)
+        run_neural_network(reg)
+        print("Now printing the neural network's results for regular nouns\n\n")
+        run_neural_network(irreg)
 
     else:
         X_train, X_test, y_train, y_test = prepare_data(is_phonology, test_size,
                                                         text_file, mix)
         run_neural_network(X_train, X_test, y_train, y_test)
-
-
-# run_model(True, .2, 'small.txt')
