@@ -99,9 +99,9 @@ def string_change(noun_sing: str, engine: inflect.engine, is_phonology: bool,
         return EMPTY_CHARACTER * len(noun_sing)
 
     # iterates through and checks the differences between noun_sing and noun_plural
-    string_change = ""
+    string_change = "*"
     iterating_index = min(sing_length, plural_length)
-    for index in range(iterating_index):
+    for index in range(1, iterating_index):
         if noun_sing[index].lower() == noun_plural[index].lower():
             string_change += EMPTY_CHARACTER
         else:
@@ -115,8 +115,8 @@ def string_change(noun_sing: str, engine: inflect.engine, is_phonology: bool,
     return string_change
 
 
-def format_string_change(word: str, word_orig: str, engine: inflect.engine,
-                         is_phonology: bool, phoneme_dict: dict):
+def formatted_string_change(word: str, word_orig: str, engine: inflect.engine,
+                            is_phonology: bool, phoneme_dict: dict):
     '''
     Formats the change in string to conform to the original word's structure
     '''
@@ -145,7 +145,7 @@ def predict_plural(noun: str, sim_words: 'list[str]', engine: inflect.engine,
         return pluralize_regular_noun(noun, is_phonology)
 
     changes_sim_words = Counter([
-        format_string_change(noun, word, engine, is_phonology, phoneme_dict) for word in sim_words
+        formatted_string_change(noun, word, engine, is_phonology, phoneme_dict) for word in sim_words
     ])
 
     most_common_change, _ = changes_sim_words.most_common(1)[0]
@@ -163,6 +163,8 @@ def pluralize_regular_noun(noun: str, is_phonology: bool):
     else:
         if noun[-1] in ['t', 'k', 'p']:
             return noun + 's'
+        if noun[-1] == 's':
+            return noun + 'iz'
         return noun + 'z'
 
 
@@ -175,11 +177,11 @@ def apply_change_to_string(noun: str, formatted_change: str):
     '''
 
     changed_string = ''
-    for index in range(len(formatted_change)):
-        if formatted_change[index] == EMPTY_CHARACTER:
+    for index, changed_char in enumerate(formatted_change):
+        if changed_char == EMPTY_CHARACTER:
             changed_string += noun[index].lower()
         else:
-            changed_string += formatted_change[index].lower()
+            changed_string += changed_char.lower()
     return changed_string
 
 

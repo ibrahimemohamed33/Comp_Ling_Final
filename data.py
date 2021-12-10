@@ -8,7 +8,8 @@ from collections import Counter
 
 
 TEXT_FOLDER_NAME = 'Text_Files'
-REGULAR_NAME, IRREGULAR_NAME = 'regular', 'irregular'
+REGULAR_NAME = 'regular'
+IRREGULAR_NAME = 'irregular'
 PHONOLOGY_NAME, ORTHOGRAPH_NAME = "phonologies", 'orthography'
 
 

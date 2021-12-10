@@ -1,14 +1,17 @@
 import inflect
 import pickle
-import eng_to_ipa as ipa
 import os
+import data
+import eng_to_ipa as ipa
+import pandas as pd
 
 
 vowels = ['a', 'e', 'i', 'o', 'u']
 
 EMPTY_CHARACTER, DELETE = "*", '-'
-PHONEME_DICT_NAME = "phoneme_to_phoneme_plural.obj"
-PHONEME_DICT_FOLDER_NAME = 'Object_Files'
+PHONEME_DICT_NAME = "phoneme_dict.obj"
+PHONEME_LIST_NAME = 'phoneme_list.obj'
+PHONEME_FOLDER_NAME = 'Object_Files'
 MODEL_COLUMNS = ["noun", 'noun_rep', 'similar_words', "predicted_plural",
                  'actual_plural', 'accurate_prediction']
 
@@ -37,35 +40,85 @@ def format_noun(noun: str) -> str:
     return noun.lower()
 
 
+def get_object_path(name: str, is_regular: bool, folder_name: str,
+                    is_phonology=False) -> str:
+    '''
+    Returns the directory of an object with the name depending on these params
+    '''
+    regular_name = data.REGULAR_NAME if is_regular else data.IRREGULAR_NAME
+    phon_name = data.PHONOLOGY_NAME if is_phonology else ''
+    object_name = regular_name + '_' + phon_name + name
+    return os.path.join(folder_name, object_name)
+
+
+def load_object(name: str, is_regular: bool, is_dict: bool,
+                folder_name=PHONEME_FOLDER_NAME) -> dict or list:
+    '''
+    Loads an object using pickle given the object's name and folder
+    '''
+    path = get_object_path(name, is_regular, folder_name)
+    if not os.path.isfile(path):
+        return {} if is_dict else []
+
+    with open(path, 'rb') as f:
+        return pickle.load(f)
+
+
+def save_object(name: str, is_regular: bool, object: list or dict, is_phonology=None,
+                folder_name=PHONEME_FOLDER_NAME) -> None:
+    '''
+    Saves an object into the folder with a given name
+    '''
+    path = get_object_path(name, is_regular, folder_name, is_phonology)
+
+    with open(path, 'wb') as f:
+        pickle.dump(object, f)
+
+
 def process_nouns(nouns: 'list[str]', is_phonology: bool, engine: inflect.engine,
                   is_regular: bool):
+    '''
+    Processes and saves the nouns into an object file. One huge advantage was
+    this reduces the HOURS of computing that goes into these large datasets.
+    Another one is that it allows anyone with the file to load up the data and
+    reproduce the results
+    '''
     if not is_phonology:
         return nouns, {}
     else:
-        regular_name = "REGULAR" if is_regular else "IRREGULAR"
-        file_name = regular_name + "_" + PHONEME_DICT_NAME
-        path = os.path.join(PHONEME_DICT_FOLDER_NAME, file_name)
-        phoneme_dict, phoneme_list = {}, []
-        if os.path.isfile(path):
-            with open(file_name, 'rb') as f:
-                phoneme_dict = pickle.load(f)
+        phoneme_dict = load_object(PHONEME_DICT_NAME, is_regular, True)
+        if len(phoneme_dict) != len(nouns):
+            for noun in nouns:
+                noun_rep, plural_rep = create_rep(noun, engine, is_phonology)
+                if noun_rep and plural_rep and noun_rep not in phoneme_dict:
+                    phoneme_dict[noun_rep] = plural_rep
 
-        for noun in nouns:
-            plural_noun = engine.plural_noun(noun)
-            noun_IPA, plural_IPA = word_IPA(noun), word_IPA(plural_noun)
-            if noun_IPA != EMPTY_CHARACTER and plural_IPA != EMPTY_CHARACTER:
-                phoneme_list.append(noun_IPA)
-                if noun_IPA not in phoneme_dict:
-                    phoneme_dict[noun_IPA] = plural_IPA
-
-        with open(path, 'wb') as f:
-            pickle.dump(phoneme_dict, f)
+            phoneme_list = list(phoneme_dict.keys())
+            save_object(PHONEME_DICT_NAME, is_regular, phoneme_dict)
+            save_object(PHONEME_LIST_NAME, is_regular, phoneme_list)
 
         return phoneme_list, phoneme_dict
 
 
 def create_rep(noun: str, engine: inflect.engine, is_phonology: str):
+    '''
+    Creates an orthographic or phonetic representation for each noun. If one
+    or the other does not hold, we return None to ensure they do not get loaded
+    into the models
+    '''
+    noun = noun.replace('-', '').replace('_', '')
     plural_noun = engine.plural_noun(noun)
-    if not is_phonology:
-        return noun, plural_noun
-    return word_IPA(noun), word_IPA(plural_noun)
+    noun_rep = word_IPA(noun).replace('ˈ', '').replace('ˌ', '')
+    plural_rep = word_IPA(plural_noun).replace('ˈ', '').replace('ˌ', '')
+
+    if noun_rep == EMPTY_CHARACTER or plural_rep == EMPTY_CHARACTER:
+        return None, None
+
+    return (noun_rep, plural_rep) if is_phonology else (noun, plural_noun)
+
+
+def remove_unsimilar_words(df: pd.DataFrame):
+    '''
+    Removes words from the dataframe which lack any similar words
+    '''
+    return df[df.similar_words.map(lambda d: len(d) > 0)]
