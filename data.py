@@ -10,7 +10,7 @@ from collections import Counter
 TEXT_FOLDER_NAME = 'Text_Files'
 REGULAR_NAME = 'regular'
 IRREGULAR_NAME = 'irregular'
-PHONOLOGY_NAME, ORTHOGRAPH_NAME = "phonologies", 'orthography'
+PHONOLOGY_NAME, ORTHOGRAPH_NAME = "phonology", 'orthography'
 
 
 def get_file_pathname(is_regular: bool, is_phonology: bool, file_name: str) -> str:
@@ -41,7 +41,7 @@ def is_regular_noun(noun: str, engine: inflect.engine) -> bool:
     )
 
 
-def find_all_singular_nouns(filename: str) -> 'list[str]':
+def find_all_singular_nouns(filename: str) -> tuple('list[str]', 'list[str]'):
     '''
     Finds all singular nouns in the file by leveraging NLTK's pos_tag feature
     and then classifying the noun as regular or irregular. The function orders

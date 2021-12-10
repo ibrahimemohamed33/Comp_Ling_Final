@@ -26,10 +26,11 @@ def cognitive_model(nouns, epsilon: int, is_regular: bool, limit=25,
         noun_rep, plural_rep = create_rep(noun, engine, is_phonology)
         if noun_rep and plural_rep:
             sim_words = get_similar_words(noun_rep, data, epsilon, limit)
+
             predicted_plural = predict_plural(noun_rep, sim_words, engine,
                                               is_phonology, phoneme_dict)
             rows.append({'noun': noun,
-                         'noun_rep': noun_rep,
+                         'noun_IPA': noun_rep,
                          'similar_words': sim_words,
                          'predicted_plural': predicted_plural,
                          'actual_plural': plural_rep,
@@ -85,10 +86,11 @@ def run_simulations(file_name: str, max_epsilon: int):
     and epsilon
     '''
     reg_nouns, irreg_nouns = find_all_singular_nouns(file_name)
+    all_nouns = 
 
     print("Now running the models on irregular nouns ")
 
-    p2, q2 = accuracy_values(irreg_nouns, False, False, max_epsilon)
+    p2, q2 = accuracy_values(irreg_nouns.extend(reg_nouns), False, False, max_epsilon)
     x2, y2 = accuracy_values(irreg_nouns, False, True, max_epsilon)
 
     print("Now running the models on regular nouns ")

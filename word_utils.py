@@ -47,7 +47,7 @@ def get_object_path(name: str, is_regular: bool, folder_name: str,
     '''
     regular_name = data.REGULAR_NAME if is_regular else data.IRREGULAR_NAME
     phon_name = data.PHONOLOGY_NAME if is_phonology else ''
-    object_name = regular_name + '_' + phon_name + name
+    object_name = regular_name + '_' + phon_name + '_' + name
     return os.path.join(folder_name, object_name)
 
 
