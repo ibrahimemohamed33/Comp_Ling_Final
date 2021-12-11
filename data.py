@@ -41,7 +41,7 @@ def is_regular_noun(noun: str, engine: inflect.engine) -> bool:
     )
 
 
-def find_all_singular_nouns(filename: str) -> tuple('list[str]', 'list[str]'):
+def find_all_singular_nouns(filename: str) -> 'tuple[list, list]':
     '''
     Finds all singular nouns in the file by leveraging NLTK's pos_tag feature
     and then classifying the noun as regular or irregular. The function orders
