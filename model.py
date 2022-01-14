@@ -7,30 +7,39 @@ import matplotlib.pyplot as plt
 
 from data import find_all_singular_nouns
 from similar import get_similar_words, predict_plural
-from word_utils import MODEL_COLUMNS, create_rep, process_nouns, save_object
+from word_utils import *
 
 COG_MODEL_NAME = "cognitive_model_epsilon=%d.obj"
 
 
-def cognitive_model(nouns, epsilon: int, is_regular: bool, limit=25,
-                    is_phonology=False, save=True) -> pd.DataFrame:
+def cognitive_model(nouns: 'list[str]', epsilon: int, engine: inflect.engine,
+                    is_phon_model: bool, limit=25, save=True) -> pd.DataFrame:
     '''
     Runs the similarity computations to attain a data representation of
     a noun, the similar words, its predicted plural, its actual plural, and
     whether the prediction was accurate
     '''
-    rows, engine = [], inflect.engine()
-    data, phoneme_dict = process_nouns(nouns, is_phonology, engine, is_regular)
-
+    rows = []
+    data, phoneme_dict = process_nouns(nouns=nouns,
+                                       is_phon_model=is_phon_model,
+                                       engine=engine)
     for noun in nouns:
-        noun_rep, plural_rep = create_rep(noun, engine, is_phonology)
+        noun_rep, plural_rep = create_rep(noun=noun,
+                                          engine=engine,
+                                          is_phon_model=is_phon_model)
         if noun_rep and plural_rep:
-            sim_words = get_similar_words(noun_rep, data, epsilon, limit)
+            sim_words = get_similar_words(noun_rep=noun_rep,
+                                          nouns=data,
+                                          epsilon=epsilon,
+                                          limit=limit)
 
-            predicted_plural = predict_plural(noun_rep, sim_words, engine,
-                                              is_phonology, phoneme_dict)
+            predicted_plural = predict_plural(noun_rep=noun_rep,
+                                              sim_words=sim_words,
+                                              engine=engine,
+                                              is_phon_model=is_phon_model,
+                                              phoneme_dict=phoneme_dict)
             rows.append({'noun': noun,
-                         'noun_IPA': noun_rep,
+                         'noun_rep': noun_rep,
                          'similar_words': sim_words,
                          'predicted_plural': predicted_plural,
                          'actual_plural': plural_rep,
@@ -39,75 +48,76 @@ def cognitive_model(nouns, epsilon: int, is_regular: bool, limit=25,
     dataframe = pd.DataFrame(rows, columns=MODEL_COLUMNS)
 
     if save:
-        save_object(COG_MODEL_NAME % (epsilon), is_regular, dataframe,
-                    is_phonology, folder_name="saved_models")
+        filename = COG_MODEL_NAME % (epsilon)
+        save_object(name=filename,
+                    object=dataframe,
+                    is_phon_model=is_phon_model,
+                    folder_name=MODEL_FOLDER_NAME)
 
     return dataframe
 
 
-def orthographic_model(nouns: 'list[str]', epsilon: int, is_regular: bool):
-    return cognitive_model(nouns, epsilon, is_regular, is_phonology=False)
-
-
-def phonological_model(nouns: 'list[str]', epsilon: int, is_regular: bool):
-    return cognitive_model(nouns, epsilon, is_regular, is_phonology=True)
-
-
-def accuracy_values(nouns: 'list[str]', is_regular: bool, is_phonology: bool,
-                    max_epsilon: int, debug=True):
+def orthographic_model(nouns: 'list[str]', epsilon: int, engine: inflect.engine):
     '''
-    Returns the accuracy values for a the model for each 
-    epsilon in 1, ..., max_epsilon - 1
+    Applies the orthographic model on the list of nouns
     '''
+    return cognitive_model(nouns, epsilon, engine, is_phon_model=False)
 
-    x_values, y_values = [], []
+
+def phonological_model(nouns: 'list[str]', epsilon: int, engine: inflect.engine):
+    '''
+    Applies the phonological model on the list of nouns
+    '''
+    return cognitive_model(nouns, epsilon, engine, is_phon_model=True)
+
+
+def accuracy_values(nouns: 'list[str]', is_phon_model: bool,
+                    engine: inflect.engine, max_epsilon: int):
+    '''
+    Returns a model's accuracy values for the model for each epsilon in 1, ..., max_epsilon - 1
+    '''
+    valuesX, valuesY = [], []
+
     for epsilon in range(1, max_epsilon):
-        x_values.append(epsilon)
-        df = cognitive_model(nouns, epsilon, is_regular,
-                             25, is_phonology, False)
+        valuesX.append(epsilon)
+        model = cognitive_model(nouns=nouns,
+                                epsilon=epsilon,
+                                engine=engine,
+                                is_phon_model=is_phon_model,
+                                save=False)
 
-        values = json.loads(df.accurate_prediction.value_counts().to_json())
-        if debug:
-            print("values=", values)
-            pd.set_option("display.max_rows", 100, "display.max_columns", None)
-        try:
-            accuracy_rate = values['True'] / (values['True'] + values['False'])
-        except KeyError as e:
-            accuracy_rate = 0 if e == "True" else 1
+        output = model.accurate_prediction.value_counts()
+        values = json.loads(output.to_json())
+        accuracy_rate = calculate_accuracy_rate(values)
+        valuesY.append(accuracy_rate)
 
-        y_values.append(accuracy_rate)
-
-    return x_values, y_values
+    return valuesX, valuesY
 
 
-def run_simulations(file_name: str, max_epsilon: int):
+def run_simulations(file_name: str, max_epsilon: int, engine: inflect.engine):
     '''
-    Runs the cognitive models and plots the accuracy rates over regular/irregular noun
-    and epsilon
+    Plots the models' accuracy rates over regular/irregular nouns and epsilon
     '''
-    reg_nouns, irreg_nouns = find_all_singular_nouns(file_name)
-    all_nouns = 
+    reg_nouns, irreg_nouns = find_all_singular_nouns(file_name, engine)
+    all_nouns = irreg_nouns + reg_nouns
 
-    print("Now running the models on irregular nouns ")
+    print("Now running the models...")
 
-    p2, q2 = accuracy_values(irreg_nouns.extend(reg_nouns), False, False, max_epsilon)
-    x2, y2 = accuracy_values(irreg_nouns, False, True, max_epsilon)
+    orthX, orthY = accuracy_values(nouns=all_nouns,
+                                   is_phon_model=False,
+                                   engine=engine,
+                                   max_epsilon=max_epsilon)
 
-    print("Now running the models on regular nouns ")
-    p1, q1 = accuracy_values(reg_nouns, True, False, max_epsilon)
-    x1, y1 = accuracy_values(reg_nouns, True, True, max_epsilon)
+    phonX, phonY = accuracy_values(nouns=all_nouns,
+                                   is_phon_model=True,
+                                   engine=engine,
+                                   max_epsilon=max_epsilon)
 
-    print("Now plotting the values")
-    fig, axs = plt.subplots(2, 2)
+    print("Now plotting the values...")
 
-    axs[0, 0].plot(p1, q1), axs[0, 0].set_title('O(Regular Nouns)')
-    axs[1, 0].plot(p2, q2, 'tab:green'), axs[1,
-                                             0].set_title('O(Irregular Nouns)')
-
-    axs[0, 1].plot(x1, y1, 'tab:orange'), axs[0,
-                                              1].set_title('P(Regular Nouns)')
-    axs[1, 1].plot(x2, y2, 'tab:red'), axs[1,
-                                           1].set_title('P(Irregular Nouns)')
+    fig, axs = plt.subplots(2)
+    axs[0].plot(orthX, orthY, 'tab:green'), axs[0].set_title('O(Nouns)')
+    axs[1].plot(phonX, phonY, 'tab:red'), axs[1].set_title('P(Nouns)')
 
     for ax in axs.flat:
         ax.set_ylim(bottom=0, top=1)
@@ -117,3 +127,25 @@ def run_simulations(file_name: str, max_epsilon: int):
         ax.label_outer()
 
     plt.savefig(os.path.join('Plots', 'Main_Plot.png'))
+
+
+if __name__ == '__main__':
+    epsilon, file_name = 3, 'big.txt'
+    engine = inflect.engine()
+
+    reg_nouns, irreg_nouns = find_all_singular_nouns(file_name)
+    orth_regular = orthographic_model(nouns=reg_nouns,
+                                      epsilon=epsilon,
+                                      engine=engine)
+
+    orth_irregular = orthographic_model(nouns=irreg_nouns,
+                                        epsilon=epsilon,
+                                        engine=engine)
+
+    phon_regular = phonological_model(nouns=reg_nouns,
+                                      epsilon=epsilon,
+                                      engine=engine)
+
+    phon_irregular = phonological_model(nouns=irreg_nouns,
+                                        epsilon=epsilon,
+                                        engine=engine)
