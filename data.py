@@ -23,29 +23,21 @@ def is_regular_noun(noun: str, engine: inflect.engine) -> bool:
     )
 
 
-def find_all_singular_nouns(filename: str, engine: inflect.engine) -> 'tuple[list, list]':
+def find_all_singular_nouns(filename: str) -> 'tuple[list, list]':
     '''
-    Finds all unique, singular nouns in the file using NLTK's pos_tag feature. The
-    function then classifies each noun as regular or irregular, and orders
-    nouns by their frequency
+    Finds all unique, singular nouns in the file using NLTK's pos_tag feature.
     '''
     file_path = os.path.join(TEXT_FOLDER_NAME, filename)
     text_content = open(file_path).read().lower()
     tokens = nltk.word_tokenize(text_content)
 
     # returns all singular regular and irregular nouns in the text corpus
-    reg_nouns, irreg_nouns = [], []
+    all_nouns = []
     for (word, pos) in nltk.pos_tag(tokens):
         formatted_word = re.sub(r'\W+', '', word.replace('-', ''))
         is_singular = word_utils.is_singular_noun(formatted_word, pos)
         if is_singular:
-            if is_regular_noun(formatted_word, engine):
-                reg_nouns.append(formatted_word)
-            else:
-                irreg_nouns.append(formatted_word)
+            all_nouns.append(formatted_word)
 
-    unique_reg, unique_irreg = Counter(reg_nouns), Counter(irreg_nouns)
-    unique_reg = list(unique_reg.keys())
-    unique_irreg = list(unique_irreg.keys())
-
-    return unique_reg, unique_irreg
+    unique_nouns = Counter(all_nouns).keys()
+    return list(unique_nouns)

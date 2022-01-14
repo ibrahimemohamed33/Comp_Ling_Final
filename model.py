@@ -98,9 +98,7 @@ def run_simulations(file_name: str, max_epsilon: int, engine: inflect.engine):
     '''
     Plots the models' accuracy rates over regular/irregular nouns and epsilon
     '''
-    reg_nouns, irreg_nouns = find_all_singular_nouns(file_name, engine)
-    all_nouns = irreg_nouns + reg_nouns
-
+    all_nouns = find_all_singular_nouns(file_name)
     print("Now running the models...")
 
     orthX, orthY = accuracy_values(nouns=all_nouns,
