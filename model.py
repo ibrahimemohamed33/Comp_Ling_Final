@@ -128,7 +128,7 @@ def run_simulations(file_name: str, max_epsilon: int, engine: inflect.engine):
 
 
 if __name__ == '__main__':
-    epsilon, file_name = 3, 'big.txt'
+    epsilon, file_name = 2, 'big.txt'
     engine = inflect.engine()
 
     reg_nouns, irreg_nouns = find_all_singular_nouns(file_name)
