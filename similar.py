@@ -1,51 +1,27 @@
 import inflect
 
-from word_utils import EMPTY_CHARACTER, DELETE
+from word_utils import EMPTY_CHARACTER, DELETE, contains_empty_characters
 from collections import Counter
 
 
 def are_similar(wordA: str, wordB: str, epsilon: int or float):
     '''
     Checks if wordA and wordB are similar by checking if d(wordA, wordB) <= epsilon,
-    where d: L x L -> R are Levenshtein distance metrics. Since we 
-    want different words from wordA or wordB, we must discount identical strings
-
-    The Hamming distance serves as an upper bound to the Levenshtein distance
-    for strings of the same length
+    where d: L x L -> R are Levenshtein distance metrics. We want nonidentical
+    strings in the computation.
     '''
-    distance_levenshtein = levenshtein_distance(wordA, wordB, epsilon)
-    return 0 < distance_levenshtein <= epsilon
-
-
-def hamming_distance(wordA: str, wordB: str) -> int:
-    '''
-    Computes the Hamming distance between two strings. This is particularly useful
-    in analyzing similar words that are of the same length, yet can differ more than
-    the levenshtein distance (e.g., foot and feet, goose and geese)
-    '''
-    N, count = len(wordA), 0
-
-    if N != len(wordB):
-        return float("inf")
-
-    if wordA == wordB:
-        return 0
-
-    for index in range(N):
-        count += int(wordA[index].lower() != wordB[index].lower())
-    return count
+    dL = levenshtein_distance(wordA, wordB, epsilon)
+    return 0 < dL <= epsilon
 
 
 def levenshtein_distance(wordA: str, wordB: str, epsilon: int) -> int:
     '''
-    Returns the Levenshtein distance of two strings, which is the minimum
+    Returns the Levenshtein distance between two strings, which is the minimum
     number of character edits (insertion, deletion, or substitutions)
-    to change one word into the other.
+    to change one word into the other (https://bit.ly/3ouLYcd)
 
     If the distance exceeds epsilon, we stop computing. It'll reduce the overall
     complexity when iterating through all words.
-
-    The explicit formula can be found in the wikipedia article: https://bit.ly/3ouLYcd
     '''
 
     # there is no need to keep going if the distance is above epsilon
@@ -70,17 +46,16 @@ def levenshtein_distance(wordA: str, wordB: str, epsilon: int) -> int:
     return 1 + minimum_distance
 
 
-def attain_plural(noun_singular: str, engine: inflect.engine,
-                  is_phonology: bool, phoneme_dict: dict):
+def attain_plural(noun_sing: str, engine: inflect.engine,
+                  is_phon_model: bool, phoneme_dict: dict):
     '''
-    Returns the plural of a word or phoneme. It does so by leveraging Inflect's
-    plural_noun function for orthographical words, or doing a lookup on phoneme_dict
-    if we're finding the plural of a phoneme
+    Returns a word or phoneme's plural using either Inflect's plural_noun function,
+    or the phoneme_dict.
     '''
-    return phoneme_dict[noun_singular] if is_phonology else engine.plural_noun(noun_singular)
+    return phoneme_dict[noun_sing] if is_phon_model else engine.plural_noun(noun_sing)
 
 
-def string_change(noun_sing: str, engine: inflect.engine, is_phonology: bool,
+def string_change(noun_sing: str, engine: inflect.engine, is_phon_model: bool,
                   phoneme_dict: dict):
     '''
     Returns a string that displays how noun_sing changed when pluralized.
@@ -91,10 +66,12 @@ def string_change(noun_sing: str, engine: inflect.engine, is_phonology: bool,
     **-- since "ox-" remains yet "-en" is deleted. Similarly, if duck goes to
     ducks, then the change would be represented as ****s
     '''
+    noun_plural = attain_plural(noun_sing=noun_sing,
+                                engine=engine,
+                                is_phon_model=is_phon_model,
+                                phoneme_dict=phoneme_dict)
 
-    noun_plural = attain_plural(noun_sing, engine, is_phonology, phoneme_dict)
     sing_length, plural_length = len(noun_sing), len(noun_plural)
-
     if noun_sing == noun_plural:
         return EMPTY_CHARACTER * len(noun_sing)
 
@@ -116,47 +93,51 @@ def string_change(noun_sing: str, engine: inflect.engine, is_phonology: bool,
 
 
 def formatted_string_change(word: str, word_orig: str, engine: inflect.engine,
-                            is_phonology: bool, phoneme_dict: dict):
+                            is_phon_model: bool, phoneme_dict: dict):
     '''
     Formats the change in string to conform to the original word's structure
     '''
-    change = string_change(word_orig, engine, is_phonology,
-                           phoneme_dict).replace(DELETE, '')
+    change = string_change(noun_sing=word_orig,
+                           engine=engine,
+                           is_phon_model=is_phon_model,
+                           phoneme_dict=phoneme_dict)
+
+    change = change.replace(DELETE, '')
 
     word_diff = len(word) - len(word_orig)
     if word_diff >= 0:
         return word_diff * EMPTY_CHARACTER + change
 
-    # removes the first i CHARACTERs and then returns this change
+    # removes the first i CHARACTERs and returns this change
     i = 0
-    while i < abs(word_diff) and change[i] == EMPTY_CHARACTER:
+    while i < abs(word_diff) and contains_empty_characters(change[i]):
         i += 1
     return change[i:]
 
 
-def predict_plural(noun: str, sim_words: 'list[str]', engine: inflect.engine,
-                   is_phonology: bool, phoneme_dict: dict) -> str:
+def predict_plural(noun_rep: str, sim_words: 'list[str]', engine: inflect.engine,
+                   is_phon_model: bool, phoneme_dict: dict) -> str:
     '''
     Predicts the plural of a noun by finding the most frequent plural change
     of words and applying it to noun
     '''
     # if there are no similar words, then the default is to regularize the noun
-    if not len(sim_words):
-        return pluralize_regular_noun(noun, is_phonology)
+    if not sim_words:
+        return pluralize_regular_noun(noun_rep, is_phon_model)
 
     changes_sim_words = Counter([
-        formatted_string_change(noun, word, engine, is_phonology, phoneme_dict) for word in sim_words
+        formatted_string_change(noun_rep, word, engine, is_phon_model, phoneme_dict) for word in sim_words
     ])
 
     most_common_change, _ = changes_sim_words.most_common(1)[0]
-    return apply_change_to_string(noun, most_common_change)
+    return apply_change_to_string(noun_rep, most_common_change)
 
 
-def pluralize_regular_noun(noun: str, is_phonology: bool):
+def pluralize_regular_noun(noun: str, is_phon_model: bool):
     '''
-    Pluralizes noun as if noun is regular
+    Pluralizes noun following the rules for regular nouns
     '''
-    if not is_phonology:
+    if not is_phon_model:
         if noun[-1] in ['s', 'x', 'z'] or noun[-2:] in ['ss', 'sh', 'ch']:
             return noun + 'es'
         return noun + 's'
@@ -170,30 +151,27 @@ def pluralize_regular_noun(noun: str, is_phonology: bool):
 
 def apply_change_to_string(noun: str, formatted_change: str):
     '''
-    Applies the formatted change to noun. Since the length of the formatted
-    change is within a small neighborhood of noun, the noun will be properly
-    formatted. For example, if formatted_change = "****s", then it'll apply to
-    the string "duck" and convert "duck" to "ducks"
+    Applies formatted change to noun.
     '''
 
     changed_string = ''
     for index, changed_char in enumerate(formatted_change):
-        if changed_char == EMPTY_CHARACTER:
+        if contains_empty_characters(changed_char):
             changed_string += noun[index].lower()
         else:
             changed_string += changed_char.lower()
     return changed_string
 
 
-def get_similar_words(word: str, words: 'list[str]', epsilon: int,
+def get_similar_words(noun_rep: str, nouns: 'list[str]', epsilon: int,
                       limit: int) -> 'list[str]':
     '''
     Finds similar words within the array of words
     '''
     similar_words = []
-    for other_word in words:
+    for other_word in nouns:
         if len(similar_words) <= limit:
-            if are_similar(word, other_word, epsilon):
+            if are_similar(noun_rep, other_word, epsilon):
                 similar_words.append(other_word)
         else:
             break
